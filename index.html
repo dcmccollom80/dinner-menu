@@ -1,135 +1,66 @@
 HTML
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Weekly Dinner Menu</title>
-    <style>
-        /* Force the exact widget size for DAKboard */
-        body {
-            margin: 0;
-            padding: 0;
-            background-color: transparent; /* Blends with DAKboard background */
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            color: #ffffff;
-            width: 400px;  /* Adjust to your DAKboard widget width */
-            height: 500px; /* Adjust to your DAKboard widget height */
-            overflow: hidden;
-        }
-
-        .menu-container {
-            box-sizing: border-box;
-            width: 100%;
-            height: 100%;
-            padding: 20px;
-            background: rgba(30, 30, 30, 0.75); /* Sleek dark glassmorphism */
-            border-radius: 12px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            display: flex;
-            flex-direction: column;
-        }
-
-        h2 {
-            margin: 0 0 15px 0;
-            text-align: center;
-            font-size: 1.5rem;
-            letter-spacing: 1px;
-            text-transform: uppercase;
-            color: #ffcc00; /* Accent color */
-            border-bottom: 2px solid rgba(255, 255, 255, 0.1);
-            padding-bottom: 10px;
-        }
-
-        .menu-list {
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            flex-grow: 1;
-        }
-
-        .menu-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 6px 0;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-        }
-
-        .menu-item:last-child {
-            border-bottom: none;
-        }
-
-        .day {
-            font-weight: bold;
-            text-transform: uppercase;
-            font-size: 0.9rem;
-            color: #aaaaaa;
-            width: 30%;
-        }
-
-        .meal {
-            font-size: 1.05rem;
-            width: 70%;
-            text-align: right;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis; /* Prevents text wrap breaking the layout */
-        }
-    </style>
-</head>
-<body>
-
-    <div class="menu-container">
-        <h2>Dinner Menu</h2>
-        <div id="menu-list" class="menu-list">
-            <div class="menu-item"><span class="day">Loading...</span></div>
-        </div>
-    </div>
-
     <script>
         // REPLACE WITH YOUR ACTUAL GOOGLE SHEET ID
         const SHEET_ID = '1c3oJ4NcbFKZcJVkf-vgXTa4VCmyN0u9GAtHhxIIjhNU'; 
-        // Base URL to fetch the public sheet data as JSON
         const URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json`;
 
         async function fetchMenu() {
             try {
                 const response = await fetch(URL);
+                if (!response.ok) throw new Error('Network response was not ok');
+                
                 const text = await response.text();
                 
-                // The Google API returns data wrapped in a function callback; this cleans it into pure JSON
-                const jsonString = text.substring(text.indexOf('{'), text.lastIndexOf('}') + 1);
+                // Clean up Google's wrapper safely
+                const startIdx = text.indexOf('{');
+                const endIdx = text.lastIndexOf('}');
+                if (startIdx === -1 || endIdx === -1) {
+                    throw new Error('Google returned invalid data structure');
+                }
+                
+                const jsonString = text.substring(startIdx, endIdx + 1);
                 const data = JSON.parse(jsonString);
                 
                 const rows = data.table.rows;
                 const menuList = document.getElementById('menu-list');
-                menuList.innerHTML = ''; // Clear loading text
+                menuList.innerHTML = ''; 
 
-                rows.forEach(row => {
-                    // row.c[0] is Day, row.c[1] is Meal
-                    const day = row.c[0] ? row.c[0].v : '';
-                    const meal = row.c[1] ? row.c[1].v : '---';
+                rows.forEach((row, index) => {
+                    // Skip the very first row if it's just headers like "Day" and "Meal"
+                    if (index === 0 && row.c[0] && row.c[0].v && row.c[0].v.toLowerCase() === 'day') {
+                        return; 
+                    }
 
-                    const itemHtml = `
-                        <div class="menu-item">
-                            <span class="day">${day}</span>
-                            <span class="meal">${meal}</span>
-                        </div>
-                    `;
-                    menuList.innerHTML += itemHtml;
+                    // Safely grab whatever is in the first two columns
+                    const day = (row.c[0] && row.c[0].v !== null) ? row.c[0].v : '';
+                    const meal = (row.c[1] && row.c[1].v !== null) ? row.c[1].v : '---';
+
+                    // Only add the row if it isn't completely empty
+                    if (day || meal !== '---') {
+                        const itemHtml = `
+                            <div class="menu-item">
+                                <span class="day">${day}</span>
+                                <span class="meal">${meal}</span>
+                            </div>
+                        `;
+                        menuList.innerHTML += itemHtml;
+                    }
                 });
+                
+                if (menuList.innerHTML === '') {
+                    menuList.innerHTML = '<div class="menu-item" style="color:#ffcc00;">Sheet is empty!</div>';
+                }
+
             } catch (error) {
-                console.error("Error fetching menu:", error);
-                document.getElementById('menu-list').innerHTML = '<div class="menu-item">Error loading menu</div>';
+                console.error("Error details:", error);
+                // Displays the exact error text on your screen to help us debug
+                document.getElementById('menu-list').innerHTML = `
+                    <div class="menu-item" style="color: #ff6666; font-size: 0.8rem; text-align: center;">
+                        Error: ${error.message}<br>Check column placement.
+                    </div>`;
             }
         }
 
-        // Load menu on page load
         fetchMenu();
-        
-        // Auto-refresh every 30 minutes to catch updates while DAKboard runs
         setInterval(fetchMenu, 30 * 60 * 1000);
     </script>
-</body>
-</html>
